@@ -19,6 +19,8 @@ var (
 	fieldRetry = []byte("retry")
 )
 
+// Parse takes a reader and a callback function.  It reads the stream and parses out SSE event
+// payloads, builds an Event struct for each, and passes it into the provided callback.
 func Parse(r io.Reader, f func(Event)) {
 	scanner := bufio.NewScanner(r)
 	scanner.Split(scanSSELines)
