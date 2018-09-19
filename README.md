@@ -1,4 +1,4 @@
-# sse
+# sse [![Build Status](https://travis-ci.org/btubbs/sse.svg?branch=master)](https://travis-ci.org/btubbs/sse) [![Coverage Status](https://coveralls.io/repos/github/btubbs/sse/badge.svg?branch=master)](https://coveralls.io/github/btubbs/sse?branch=master)
 
 This package provides several tools for working with Server Sent Event streams in Go.  Specifically:
 
