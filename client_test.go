@@ -145,7 +145,9 @@ func TestClient(t *testing.T) {
 				func(w http.ResponseWriter, r *http.Request) {
 					h := w.Header()
 					h.Set(contentTypeHeader, textEventStream)
-					w.Write([]byte(":\n"))
+					if _, err := w.Write([]byte(":\n")); err != nil {
+						panic("i hate you, linter")
+					}
 				},
 				func(w http.ResponseWriter, r *http.Request) {
 					h := w.Header()
