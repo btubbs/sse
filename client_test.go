@@ -9,11 +9,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// a little wrapper around writing to an http stream that swallows the error so we can shut errcheck
+// up.
+func writeEvent(w http.ResponseWriter, e Event) {
+	if _, err := w.Write(e.Bytes()); err != nil {
+		panic(err.Error())
+	}
+}
+
 func TestClient(t *testing.T) {
 	tt := []struct {
 		desc              string
 		server            http.HandlerFunc
-		doAssertions      func()
 		expectedEvents    []Event
 		expectedErrRegexp interface{}
 		extraAssertions   func(Client)
@@ -21,8 +28,8 @@ func TestClient(t *testing.T) {
 		{
 			desc: "just data",
 			server: func(w http.ResponseWriter, r *http.Request) {
-				w.Write(Event{Data: []byte("msg1")}.Bytes())
-				w.Write(Event{Data: []byte("msg2")}.Bytes())
+				writeEvent(w, Event{Data: []byte("msg1")})
+				writeEvent(w, Event{Data: []byte("msg2")})
 			},
 			expectedEvents: []Event{
 				{Data: []byte("msg1")},
@@ -32,8 +39,8 @@ func TestClient(t *testing.T) {
 		{
 			desc: "IDs",
 			server: func(w http.ResponseWriter, r *http.Request) {
-				w.Write(Event{Data: []byte("msg1"), ID: "foo"}.Bytes())
-				w.Write(Event{Data: []byte("msg2"), ID: "bar"}.Bytes())
+				writeEvent(w, Event{Data: []byte("msg1"), ID: "foo"})
+				writeEvent(w, Event{Data: []byte("msg2"), ID: "bar"})
 			},
 			expectedEvents: []Event{
 				{Data: []byte("msg1"), ID: "foo"},
@@ -46,8 +53,8 @@ func TestClient(t *testing.T) {
 		{
 			desc: "retries",
 			server: func(w http.ResponseWriter, r *http.Request) {
-				w.Write(Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond}.Bytes())
-				w.Write(Event{Data: []byte("msg2"), Retry: 1200 * time.Millisecond}.Bytes())
+				writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
+				writeEvent(w, Event{Data: []byte("msg2"), Retry: 1200 * time.Millisecond})
 			},
 			expectedEvents: []Event{
 				{Data: []byte("msg1"), Retry: 500 * time.Millisecond},

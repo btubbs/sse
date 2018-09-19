@@ -12,7 +12,6 @@ var (
 	bom        = []byte("\ufeff")
 	space      = []byte(" ")
 	colon      = []byte(":")
-	newline    = []byte("\n")
 	fieldEvent = []byte("event")
 	fieldData  = []byte("data")
 	fieldID    = []byte("id")

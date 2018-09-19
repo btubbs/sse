@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/btubbs/sse"
@@ -19,10 +20,10 @@ func main() {
 	}
 
 	client := sse.Client{}
-	client.Subscribe(req, func(e sse.Event) {
+	log.Fatal(client.Subscribe(req, func(e sse.Event) {
 		fmt.Println(
 			client.LastID,
 			string(e.Data),
 		)
-	})
+	}))
 }
