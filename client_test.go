@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,34 +14,90 @@ import (
 // up.
 func writeEvent(w http.ResponseWriter, e Event) {
 	if _, err := w.Write(e.Bytes()); err != nil {
+		flusher := w.(http.Flusher)
+		flusher.Flush()
 		panic(err.Error())
 	}
 }
 
+// more cases:
+// responses without content type header are rejected
+
 func TestClient(t *testing.T) {
 	tt := []struct {
 		desc              string
-		server            http.HandlerFunc
+		handlers          []http.HandlerFunc
 		expectedEvents    []Event
 		expectedErrRegexp interface{}
 		extraAssertions   func(Client)
+		clientOptions     []ClientOption
 	}{
 		{
 			desc: "just data",
-			server: func(w http.ResponseWriter, r *http.Request) {
-				writeEvent(w, Event{Data: []byte("msg1")})
-				writeEvent(w, Event{Data: []byte("msg2")})
-			},
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					// assert that the required request headers are present
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					assert.Equal(t, noCache, r.Header.Get(cacheControlHeader))
+					writeEvent(w, Event{Data: []byte("msg1")})
+					writeEvent(w, Event{Data: []byte("msg2")})
+				}},
 			expectedEvents: []Event{
 				{Data: []byte("msg1")},
 				{Data: []byte("msg2")},
 			},
 		},
 		{
+			desc: "cache control header",
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					assert.Equal(t, noCache, r.Header.Get(cacheControlHeader))
+				}},
+			expectedEvents: []Event{},
+		},
+		{
+			desc: "last ID option",
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					assert.Equal(t, "foo", r.Header.Get(lastEventIDHeader))
+				}},
+			expectedEvents: []Event{},
+			clientOptions:  []ClientOption{LastEventID("foo")},
+		},
+		{
+			desc: "bad content type",
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, "foo/foo")
+				}},
+			expectedEvents:    []Event{},
+			expectedErrRegexp: "response does not have text/event-stream Content-Type",
+		},
+		{
+			desc: "missing content type",
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, "foo/foo")
+				}},
+			expectedEvents:    []Event{},
+			expectedErrRegexp: "response does not have text/event-stream Content-Type",
+		},
+		{
 			desc: "IDs",
-			server: func(w http.ResponseWriter, r *http.Request) {
-				writeEvent(w, Event{Data: []byte("msg1"), ID: "foo"})
-				writeEvent(w, Event{Data: []byte("msg2"), ID: "bar"})
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					writeEvent(w, Event{Data: []byte("msg1"), ID: "foo"})
+					writeEvent(w, Event{Data: []byte("msg2"), ID: "bar"})
+				},
 			},
 			expectedEvents: []Event{
 				{Data: []byte("msg1"), ID: "foo"},
@@ -52,9 +109,13 @@ func TestClient(t *testing.T) {
 		},
 		{
 			desc: "retries",
-			server: func(w http.ResponseWriter, r *http.Request) {
-				writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
-				writeEvent(w, Event{Data: []byte("msg2"), Retry: 1200 * time.Millisecond})
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
+					writeEvent(w, Event{Data: []byte("msg2"), Retry: 1200 * time.Millisecond})
+				},
 			},
 			expectedEvents: []Event{
 				{Data: []byte("msg1"), Retry: 500 * time.Millisecond},
@@ -65,30 +126,75 @@ func TestClient(t *testing.T) {
 			},
 		},
 		{
-			desc: "server error",
-			server: func(w http.ResponseWriter, r *http.Request) {
-				panic("boom")
+			desc: "server error on first request",
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					panic("boom")
+				},
+			},
+			expectedErrRegexp: `Get http://127.0.0.1:\d+: EOF`,
+		},
+		{
+			desc: "auto retry on disconnect",
+			handlers: []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
+				},
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					w.Write([]byte(":\n"))
+				},
+				func(w http.ResponseWriter, r *http.Request) {
+					h := w.Header()
+					h.Set(contentTypeHeader, textEventStream)
+					writeEvent(w, Event{Data: []byte("msg2")})
+				},
+				func(w http.ResponseWriter, r *http.Request) {
+					panic("boom") // force breaking out of the loop
+				},
+			},
+			clientOptions: []ClientOption{AutoRetry(true)},
+			expectedEvents: []Event{
+				{Data: []byte("msg1"), Retry: 500 * time.Millisecond},
+				{Data: []byte("msg2")},
 			},
 			expectedErrRegexp: `Get http://127.0.0.1:\d+: EOF`,
 		},
 	}
 
 	for _, tc := range tt {
-		server := httptest.NewServer(tc.server)
+		server := httptest.NewServer(buildTestServer(tc.handlers))
 
 		client := Client{}
 		req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
 		idx := 0
 		err := client.Subscribe(req, func(e Event) {
+			fmt.Println("event", e)
 			assert.Equal(t, tc.expectedEvents[idx], e, tc.desc)
 			idx++
-		})
+		},
+			tc.clientOptions...,
+		)
+		if err != nil || tc.expectedErrRegexp != nil {
+			assert.Regexp(t, tc.expectedErrRegexp, err.Error())
+		}
 		assert.Equal(t, len(tc.expectedEvents), idx, tc.desc)
 		if tc.extraAssertions != nil {
 			tc.extraAssertions(client)
 		}
-		if tc.expectedErrRegexp != nil {
-			assert.Regexp(t, tc.expectedErrRegexp, err.Error())
+	}
+}
+
+func buildTestServer(handlers []http.HandlerFunc) http.HandlerFunc {
+	i := 0
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("i", i)
+		if i < len(handlers) {
+			handlers[i](w, r)
+			i++
 		}
 	}
 }

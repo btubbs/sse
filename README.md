@@ -10,10 +10,12 @@ This package provides several tools for working with Server Sent Event streams i
   that takes a prepared http request and an event callback.
 - A `Parse` function that takes any `io.Reader` that contains a stream of SSE bytes, and a callback
   function.  For each event in the stream, an `Event` object will be created and passed to the
-  provided callback.
+  provided callback. (The client is a thin wrapper over this parser.)
 
 TODO:
-- Add examples.
-- Add automatic retry logic
+- Add automatic retry logic to client
 - Add event emitter/publisher that will periodically push a comment line to the stream to act as a
   keepalive.
+-  set headers
+-  add Disconnect method to client
+- Add examples.
