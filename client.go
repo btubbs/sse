@@ -5,11 +5,6 @@ import (
 	"time"
 )
 
-// so we want the following:
-// provide a URL, get a stream of events
-// provide a prepared request, get a stream of events.
-// I can implement the URL nice one on top of the prepared request one.
-
 type Client struct {
 	http.Client
 	RetryDuration time.Duration
