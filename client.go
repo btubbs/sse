@@ -103,8 +103,16 @@ func AutoRetry(retry bool) ClientOption {
 	}
 }
 
+// LastEventID takes the ID that should be passed to the server to start the stream where you left
+// off.  The ClientOption that you get back should be passed into Client.Subscribe.
 func LastEventID(id string) ClientOption {
 	return func(co *clientOptions) {
 		co.lastID = id
 	}
+}
+
+// Subscribe is a shortcut for instantiating your own Client and calling its .Subscribe method.
+func Subscribe(req *http.Request, f func(Event), options ...ClientOption) error {
+	c := Client{}
+	return c.Subscribe(req, f, options...)
 }

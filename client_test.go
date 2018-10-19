@@ -10,19 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// a little wrapper around writing to an http stream that swallows the error so we can shut errcheck
-// up.
-func writeEvent(w http.ResponseWriter, e Event) {
-	if _, err := w.Write(e.Bytes()); err != nil {
-		flusher := w.(http.Flusher)
-		flusher.Flush()
-		panic(err.Error())
-	}
-}
-
-// more cases:
-// responses without content type header are rejected
-
 func TestClient(t *testing.T) {
 	tt := []struct {
 		desc              string
@@ -190,6 +177,21 @@ func TestClient(t *testing.T) {
 	}
 }
 
+func TestSubscribe(t *testing.T) {
+	f := func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set(contentTypeHeader, textEventStream)
+		writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(f))
+	req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
+	err := Subscribe(req, func(e Event) {
+		assert.Equal(t, "msg1", string(e.Data))
+	})
+	assert.Nil(t, err)
+}
+
 func buildTestServer(handlers []http.HandlerFunc) http.HandlerFunc {
 	i := 0
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -199,4 +201,12 @@ func buildTestServer(handlers []http.HandlerFunc) http.HandlerFunc {
 			i++
 		}
 	}
+}
+
+func writeEvent(w http.ResponseWriter, e Event) {
+	if _, err := w.Write(e.Bytes()); err != nil {
+		panic(err.Error())
+	}
+	flusher := w.(http.Flusher)
+	flusher.Flush()
 }

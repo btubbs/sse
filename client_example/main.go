@@ -12,18 +12,14 @@ func main() {
 	req, err := http.NewRequest(
 		http.MethodGet,
 		// This app will output a stream of incrementing integers.
-		"https://infinite-mountain-77592.herokuapp.com/events/",
+		"http://localhost:8080",
 		nil,
 	)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	client := sse.Client{}
-	log.Fatal(client.Subscribe(req, func(e sse.Event) {
-		fmt.Println(
-			client.LastID,
-			string(e.Data),
-		)
+	log.Fatal(sse.Subscribe(req, func(e sse.Event) {
+		fmt.Println(string(e.Data))
 	}))
 }

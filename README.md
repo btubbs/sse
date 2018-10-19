@@ -1,16 +1,42 @@
 # sse [![Build Status](https://travis-ci.org/btubbs/sse.svg?branch=master)](https://travis-ci.org/btubbs/sse) [![Coverage Status](https://coveralls.io/repos/github/btubbs/sse/badge.svg?branch=master)](https://coveralls.io/github/btubbs/sse?branch=master)
 
-This package provides several tools for working with Server Sent Event streams in Go.  Specifically:
+This package provides several tools for working with Server Sent Event streams in Go, including a
+client library, stream parser, and stream generator.
 
-- An `Event` struct with the fields specified by the SSE specification, using idiomatic Go types
-  (e.g. the `retry` field in the spec is represented by a Go `time.Duration`).
-- A `Bytes()` method on that struct, which will serialize the event into a byte slice that conforms
-  to the SSE spec, and can be written to any `Writer` (including an `http.ResponseWriter`).
-- A `Client` struct with all the same methods as an `http.Client`, with an added `Subscribe` method
-  that takes a prepared http request and an event callback.
-- A `Parse` function that takes any `io.Reader` that contains a stream of SSE bytes, and a callback
-  function.  For each event in the stream, an `Event` object will be created and passed to the
-  provided callback. (The client is a thin wrapper over this parser.)
+# Client
+
+To subscribe to an SSE stream, pass a `http.Request` object to `client.Subscribe`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/btubbs/sse"
+)
+
+func main() {
+	req, err := http.NewRequest(
+		http.MethodGet,
+		"https://infinite-mountain-77592.herokuapp.com/events/",
+		nil,
+	)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	client := sse.Client{}
+	log.Fatal(client.Subscribe(req, func(e sse.Event) {
+		fmt.Println(
+			client.LastID,
+			string(e.Data),
+		)
+	}))
+}
+```
 
 TODO:
 - Add automatic retry logic to client
