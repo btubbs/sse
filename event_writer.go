@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-// EventWriter is a helper for writing events to an io.Writer stream.
+// EventWriter is a helper for writing events to an http.ResponseWriter stream.
 type EventWriter struct {
 	w http.ResponseWriter
 }
