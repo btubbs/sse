@@ -9,12 +9,9 @@ import (
 )
 
 func main() {
-	req, err := http.NewRequest(
-		http.MethodGet,
-		// This app will output a stream of incrementing integers.
-		"http://localhost:8080",
-		nil,
-	)
+	// If you run server_example/main.go, then it will be listening on this host/port.
+	url := "http://localhost:8080"
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		panic(err.Error())
 	}

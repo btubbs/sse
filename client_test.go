@@ -24,11 +24,10 @@ func TestClient(t *testing.T) {
 			handlers: []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
 					// assert that the required request headers are present
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
+					evw := NewEventWriter(w)
 					assert.Equal(t, noCache, r.Header.Get(cacheControlHeader))
-					writeEvent(w, Event{Data: []byte("msg1")})
-					writeEvent(w, Event{Data: []byte("msg2")})
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg1")}))
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg2")}))
 				}},
 			expectedEvents: []Event{
 				{Data: []byte("msg1")},
@@ -39,8 +38,7 @@ func TestClient(t *testing.T) {
 			desc: "cache control header",
 			handlers: []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
+					NewEventWriter(w)
 					assert.Equal(t, noCache, r.Header.Get(cacheControlHeader))
 				}},
 			expectedEvents: []Event{},
@@ -49,8 +47,7 @@ func TestClient(t *testing.T) {
 			desc: "last ID option",
 			handlers: []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
+					NewEventWriter(w)
 					assert.Equal(t, "foo", r.Header.Get(lastEventIDHeader))
 				}},
 			expectedEvents: []Event{},
@@ -59,10 +56,7 @@ func TestClient(t *testing.T) {
 		{
 			desc: "bad content type",
 			handlers: []http.HandlerFunc{
-				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, "foo/foo")
-				}},
+				func(w http.ResponseWriter, r *http.Request) {}},
 			expectedEvents:    []Event{},
 			expectedErrRegexp: "response does not have text/event-stream Content-Type",
 		},
@@ -80,10 +74,9 @@ func TestClient(t *testing.T) {
 			desc: "IDs",
 			handlers: []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
-					writeEvent(w, Event{Data: []byte("msg1"), ID: "foo"})
-					writeEvent(w, Event{Data: []byte("msg2"), ID: "bar"})
+					evw := NewEventWriter(w)
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg1"), ID: "foo"}))
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg2"), ID: "bar"}))
 				},
 			},
 			expectedEvents: []Event{
@@ -98,10 +91,9 @@ func TestClient(t *testing.T) {
 			desc: "retries",
 			handlers: []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
-					writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
-					writeEvent(w, Event{Data: []byte("msg2"), Retry: 1200 * time.Millisecond})
+					evw := NewEventWriter(w)
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond}))
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg2"), Retry: 1200 * time.Millisecond}))
 				},
 			},
 			expectedEvents: []Event{
@@ -125,23 +117,21 @@ func TestClient(t *testing.T) {
 			desc: "auto retry on disconnect",
 			handlers: []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
-					writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
+					evw := NewEventWriter(w)
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond}))
 				},
 				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
+					NewEventWriter(w)
 					if _, err := w.Write([]byte(":\n")); err != nil {
 						panic("i hate you, linter")
 					}
 				},
 				func(w http.ResponseWriter, r *http.Request) {
-					h := w.Header()
-					h.Set(contentTypeHeader, textEventStream)
-					writeEvent(w, Event{Data: []byte("msg2")})
+					evw := NewEventWriter(w)
+					assert.Nil(t, evw.Write(Event{Data: []byte("msg2")}))
 				},
 				func(w http.ResponseWriter, r *http.Request) {
+					NewEventWriter(w)
 					panic("boom") // force breaking out of the loop
 				},
 			},
@@ -179,9 +169,8 @@ func TestClient(t *testing.T) {
 
 func TestSubscribe(t *testing.T) {
 	f := func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set(contentTypeHeader, textEventStream)
-		writeEvent(w, Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond})
+		evw := NewEventWriter(w)
+		assert.Nil(t, evw.Write(Event{Data: []byte("msg1"), Retry: 500 * time.Millisecond}))
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(f))
@@ -201,12 +190,4 @@ func buildTestServer(handlers []http.HandlerFunc) http.HandlerFunc {
 			i++
 		}
 	}
-}
-
-func writeEvent(w http.ResponseWriter, e Event) {
-	if _, err := w.Write(e.Bytes()); err != nil {
-		panic(err.Error())
-	}
-	flusher := w.(http.Flusher)
-	flusher.Flush()
 }
