@@ -15,9 +15,9 @@ func NewEventWriter(w http.ResponseWriter) *EventWriter {
 	return &EventWriter{w: w}
 }
 
-// Write takes a io.Writer and an Event, serializes the Event to bytes, and writes them out to the
-// writer.  If the writer is also an http.Flusher, then it will also flush the bytes out so the
-// event will be sent over the wire immediately. It automatically sets the Content-Type header to
+// Write takes an Event, serializes the Event to bytes, and writes them out to the http stream.  If
+// the stream is also an http.Flusher, then it will also flush the bytes out so the event
+// will be sent over the wire immediately. It automatically sets the Content-Type header to
 // text/event-stream.
 func (evw *EventWriter) Write(e Event) error {
 
